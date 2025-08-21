@@ -19,9 +19,36 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// 获取系统代理设置
-const proxyUrl = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY;
-const httpsAgent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : null;
+// 获取代理配置
+const httpsAgent = config.proxy.enabled && config.proxy.url ? new HttpsProxyAgent(config.proxy.url) : null;
+
+// 判断是否为本地地址
+function isLocalAddress(url) {
+  const urlObj = new URL(url);
+  const hostname = urlObj.hostname;
+  return hostname === 'localhost' || 
+         hostname === '127.0.0.1' || 
+         hostname === '0.0.0.0' || 
+         hostname.startsWith('192.168.') ||
+         hostname.startsWith('10.') ||
+         hostname.startsWith('172.');
+}
+
+// 获取适当的代理 agent
+function getProxyAgent(targetUrl) {
+  // 如果代理未启用，返回 false (不使用代理)
+  if (!config.proxy.enabled) {
+    return false;
+  }
+  
+  // 如果目标是本地地址，不使用代理
+  if (isLocalAddress(targetUrl)) {
+    return false;
+  }
+  
+  // 其他情况使用配置的代理
+  return httpsAgent;
+}
 
 // 基础中间件
 app.use(cors({
@@ -30,9 +57,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// JSON 解析中间件
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
 
 // 请求日志
 app.use(requestLogger);
@@ -44,6 +69,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/v1/audio', authenticateApiKey, audioRoutes);
 app.use('/v1/images', authenticateApiKey, imageRoutes);
 
+
 // 代理中间件 - 将其他 /v1/* 请求转发到 LMStudio
 app.use('/v1', authenticateApiKey, createProxyMiddleware({
   target: `${config.lmstudio.baseURL}/v1`,
@@ -53,9 +79,13 @@ app.use('/v1', authenticateApiKey, createProxyMiddleware({
   },
   timeout: config.lmstudio.timeout,
   proxyTimeout: config.lmstudio.timeout,
-  agent: httpsAgent,
+  agent: getProxyAgent(config.lmstudio.baseURL),
+  // 让代理库处理请求体流
+  selfHandleResponse: false,
   onProxyReq: (proxyReq, req) => {
     console.log(`[代理] ${req.method} ${req.path} -> ${config.lmstudio.baseURL}/v1${req.path}`);
+    
+    // 处理认证头
     if (req.headers['authorization']) {
       proxyReq.setHeader('authorization', req.headers['authorization']);
     }
@@ -94,64 +124,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// 服务信息端点
-app.get('/v1/models', authenticateApiKey, async (req, res) => {
-  try {
-    const ttsService = new TTSService();
-    const sttService = new STTService();
-    
-    const [voices, sttAvailable] = await Promise.all([
-      ttsService.getAvailableVoices(),
-      sttService.checkAvailability()
-    ]);
 
-    res.json({
-      object: 'list',
-      data: [
-        {
-          id: 'tts-1',
-          object: 'model',
-          created: Date.now(),
-          owned_by: 'miniAiApi',
-          permission: [],
-          root: 'tts-1',
-          parent: null,
-          description: 'Mac Mini M4 原生 TTS 服务',
-          capabilities: ['text-to-speech'],
-          voices: voices.slice(0, 10).map(v => ({
-            id: v.name.toLowerCase(),
-            name: v.name,
-            language: v.language,
-            description: v.description
-          }))
-        },
-        {
-          id: 'whisper-1',
-          object: 'model',
-          created: Date.now(),
-          owned_by: 'miniAiApi',
-          permission: [],
-          root: 'whisper-1',
-          parent: null,
-          description: 'MLX Whisper 语音识别服务',
-          capabilities: ['speech-to-text', 'translation'],
-          available: sttAvailable,
-          models: sttService.getAvailableModels(),
-          languages: sttService.getSupportedLanguages()
-        }
-      ]
-    });
-  } catch (error) {
-    console.error(`[API] 获取模型信息失败: ${error.message}`);
-    res.status(500).json({
-      error: {
-        message: 'Failed to get model information',
-        type: 'server_error',
-        code: 'model_info_error'
-      }
-    });
-  }
-});
 
 // 根路径返回 API 信息
 app.get('/', (req, res) => {

@@ -62,6 +62,12 @@ export const config = {
     baseURL: process.env.DRAW_THINGS_BASE_URL || 'http://127.0.0.1:7860',
     enabled: process.env.DRAW_THINGS_ENABLED === 'true',
     timeout: parseInt(process.env.DRAW_THINGS_TIMEOUT) || 120000
+  },
+
+  // 代理配置
+  proxy: {
+    enabled: process.env.LOCAL_PROXY_ENABLED === 'true',
+    url: process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY
   }
 };
 

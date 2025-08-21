@@ -18,7 +18,7 @@ if (!fs.existsSync(imagesDir)) {
 }
 
 // OpenAI 图像生成接口
-router.post('/generations', async (req, res) => {
+router.post('/generations', express.json({ limit: '50mb' }), async (req, res) => {
   try {
     // 检查 Draw Things 是否启用
     if (!config.drawThings.enabled) {
@@ -199,7 +199,7 @@ router.post('/generations', async (req, res) => {
 });
 
 // 图像编辑接口 (可选实现)
-router.post('/edits', async (req, res) => {
+router.post('/edits', express.json({ limit: '50mb' }), async (req, res) => {
   res.status(501).json({
     error: {
       message: 'Image editing is not yet implemented',
@@ -210,7 +210,7 @@ router.post('/edits', async (req, res) => {
 });
 
 // 图像变化接口 (可选实现)
-router.post('/variations', async (req, res) => {
+router.post('/variations', express.json({ limit: '50mb' }), async (req, res) => {
   res.status(501).json({
     error: {
       message: 'Image variations are not yet implemented',

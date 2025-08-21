@@ -27,7 +27,7 @@ const sttService = new STTService();
  * OpenAI 兼容的 TTS 接口
  * POST /v1/audio/speech
  */
-router.post('/speech', express.json(), async (req, res) => {
+router.post('/speech', express.json({ limit: '50mb' }), async (req, res) => {
   try {
     const { 
       model = 'tts-1',
