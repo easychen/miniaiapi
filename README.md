@@ -6,7 +6,7 @@
 
 ## 概述
 
-MiniAiApi 是一个专为 M 系列芯片的 Mac 尤其是（ Mac Mini ）优化的 AI 能力服务，它尝试利用 Mac 生态支持的软件和框架（ MLX ）来提供性能最高的、和 OpenAI 兼容的 API 接口。
+MiniAiApi 是一个专为 M 系列芯片的 Mac （尤其是 Mac Mini ）优化的 AI 能力服务，它尝试利用 Mac 生态支持的软件和框架（ MLX ）来提供性能最高的、和 OpenAI 兼容的 API 接口。
 
 ## 功能特性
 
@@ -17,7 +17,7 @@ MiniAiApi 是一个专为 M 系列芯片的 Mac 尤其是（ Mac Mini ）优化�
 - 🔗 **Embeddings**: 代理转发到 LMstudio 的嵌入模型接口
 - 🎨 **Image Generation**: 集成 Draw Things Mac App 进行 AI 绘图
 - 🔌 **OpenAI 兼容**: 完全兼容 OpenAI API 格式
-- ⚡ **高性能**: 针对 M系列 Mac 优化
+- ⚡ **高性能**: 针对 M 系列 Mac 优化
 - 🛡️ **安全**: 支持 API 密钥认证
 
 ## 系统要求
