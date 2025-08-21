@@ -1,8 +1,21 @@
 import express from 'express';
 import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import config from '../../config/default.js';
 
 const router = express.Router();
+
+// 获取当前文件的目录路径
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 创建图片存储目录
+const imagesDir = path.join(__dirname, '../../public/images');
+if (!fs.existsSync(imagesDir)) {
+  fs.mkdirSync(imagesDir, { recursive: true });
+}
 
 // OpenAI 图像生成接口
 router.post('/generations', async (req, res) => {
@@ -65,9 +78,9 @@ router.post('/generations', async (req, res) => {
       seed: -1
     };
 
-    // 如果是 vivid 风格，增强提示词
-    if (style === "vivid") {
-      drawThingsPayload.prompt = `${prompt}, vibrant colors, high contrast, dynamic lighting, detailed, masterpiece`;
+    // 如果不是 vivid 风格，增强现实风格提示词
+    if (style !== "vivid") {
+      drawThingsPayload.prompt = `${prompt}, realistic, high quality, detailed, masterpiece, cinematic`;
     }
 
     console.log(`[图像生成] 向 Draw Things 发送请求: ${config.drawThings.baseURL}/sdapi/v1/txt2img`);
@@ -111,23 +124,52 @@ router.post('/generations', async (req, res) => {
     console.log(`[图像生成] 成功生成 ${drawThingsResult.images.length} 张图像`);
 
     // 转换为 OpenAI 格式响应
-    const images = drawThingsResult.images.slice(0, n).map((base64Image, index) => {
+    const images = await Promise.all(drawThingsResult.images.slice(0, n).map(async (base64Image, index) => {
       if (response_format === "b64_json") {
         return {
           b64_json: base64Image
         };
       } else {
-        // 对于 URL 格式，我们需要将 base64 转换为可访问的 URL
-        // 这里简化处理，直接返回 data URL
+        // 对于 URL 格式，保存 base64 图片为文件并返回真实 URL
+        const timestamp = Date.now();
+        const filename = `image_${timestamp}_${index}.png`;
+        const filePath = path.join(imagesDir, filename);
+        
+        // 将 base64 转换为 buffer 并保存
+        const imageBuffer = Buffer.from(base64Image, 'base64');
+        fs.writeFileSync(filePath, imageBuffer);
+        
+        // 返回完整的 URL
+        const protocol = req.protocol;
+        const host = req.get('host');
+        const imageUrl = `${protocol}://${host}/images/${filename}`;
         return {
-          url: `data:image/png;base64,${base64Image}`
+          url: imageUrl
         };
       }
-    });
+    }));
+
+    // 计算 token 使用量 (估算)
+    const promptTokens = Math.ceil(prompt.length / 4); // 大致估算，每4个字符约等于1个token
+    const imageTokens = images.length * 1000; // 每张图片估算1000个token
+    const totalTokens = promptTokens + imageTokens;
 
     const response = {
       created: Math.floor(Date.now() / 1000),
-      data: images
+      data: images,
+      background: "transparent",
+      output_format: response_format === "b64_json" ? "b64_json" : "url",
+      size: size,
+      quality: quality,
+      usage: {
+        total_tokens: totalTokens,
+        input_tokens: promptTokens,
+        output_tokens: imageTokens,
+        input_tokens_details: {
+          text_tokens: promptTokens,
+          image_tokens: 0 // 输入中没有图片
+        }
+      }
     };
 
     res.json(response);
