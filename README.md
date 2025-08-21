@@ -1,6 +1,8 @@
 # MiniAiApi
 
-> Mac Mini M4 基础能力的 OpenAI 兼容 API 服务
+**中文** | [English](README.en.md)
+
+![](res/logo.png)
 
 ## 概述
 
