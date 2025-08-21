@@ -47,25 +47,42 @@ router.post('/speech', express.json(), async (req, res) => {
       });
     }
 
-    console.log(`[API] TTS 请求 - 模型: ${model}, 语音: ${voice}, 格式: ${response_format}`);
+    // 检查是否为克隆模型（以 :clone 结尾）
+    const isCloneModel = model.endsWith(':clone');
+    const actualModel = isCloneModel ? model.slice(0, -6) : model; // 去除 :clone 后缀
 
-    // 映射 OpenAI 语音到 macOS 语音
-    const voiceMapping = {
-      'alloy': 'Yue',
-      'echo': 'Ting-Ting',
-      'fable': 'Sin-ji',
-      'onyx': 'Li-mu',
-      'nova': 'Mei-Jia',
-      'shimmer': 'Yu-shu'
-    };
+    console.log(`[API] TTS 请求 - 模型: ${actualModel}, 克隆模式: ${isCloneModel}, 语音: ${voice}, 格式: ${response_format}`);
 
-    const macVoice = voiceMapping[voice] || 'Yue';
-    
-    // 生成语音
-    const audioFile = await ttsService.synthesize(input, {
-      voice: macVoice,
-      format: response_format
-    });
+    let audioFile;
+
+    if (isCloneModel) {
+      // 使用克隆模式
+      console.log(`[API] 使用音频克隆模式生成语音`);
+      audioFile = await ttsService.synthesize(input, {
+        useClone: true,
+        format: response_format,
+        speed: speed
+      });
+    } else {
+      // 使用传统 macOS TTS
+      // 映射 OpenAI 语音到 macOS 语音
+      const voiceMapping = {
+        'alloy': 'Yue',
+        'echo': 'Ting-Ting',
+        'fable': 'Sin-ji',
+        'onyx': 'Li-mu',
+        'nova': 'Mei-Jia',
+        'shimmer': 'Yu-shu'
+      };
+
+      const macVoice = voiceMapping[voice] || 'Yue';
+      
+      // 生成语音
+      audioFile = await ttsService.synthesize(input, {
+        voice: macVoice,
+        format: response_format
+      });
+    }
 
     // 设置响应头
     const mimeType = response_format === 'mp3' ? 'audio/mpeg' : 'audio/wav';

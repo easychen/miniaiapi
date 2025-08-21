@@ -11,6 +11,7 @@ export class TTSService {
     this.voice = config.tts.voice;
     this.outputFormat = config.tts.outputFormat;
     this.tempDir = config.tts.tempDir;
+    this.cloneConfig = config.tts.clone;
     
     // 确保临时目录存在
     this.ensureTempDir();
@@ -40,6 +41,85 @@ export class TTSService {
   }
 
   /**
+   * 使用 mlx-audio 进行语音克隆
+   * @param {string} text - 要转换的文本
+   * @param {Object} options - 可选参数
+   * @returns {Promise<string>} 生成的音频文件路径
+   */
+  async synthesizeWithClone(text, options = {}) {
+    const model = options.model || this.cloneConfig.model;
+    const refAudio = options.refAudio || this.cloneConfig.refAudio;
+    const refText = options.refText || this.cloneConfig.refText;
+    const langCode = options.langCode || this.cloneConfig.langCode;
+    const speed = options.speed || this.cloneConfig.speed;
+    const format = options.format || this.outputFormat;
+
+    if (!refAudio || !refText) {
+      throw new Error('使用克隆模式需要配置参考音频和参考文本');
+    }
+
+    const cleanedText = this.cleanText(text);
+    const timestamp = Date.now();
+    const outputFile = path.join(this.tempDir, `clone_speech_${timestamp}.${format}`);
+
+    try {
+      console.log(`[TTS-Clone] 开始使用 mlx-audio 生成克隆语音`);
+      console.log(`[TTS-Clone] 模型: ${model}`);
+      console.log(`[TTS-Clone] 参考音频: ${refAudio}`);
+      console.log(`[TTS-Clone] 语言代码: ${langCode}`);
+      console.log(`[TTS-Clone] 语速: ${speed}`);
+      console.log(`[TTS-Clone] 文本内容: ${cleanedText.substring(0, 100)}...`);
+
+      // 构建 mlx-audio 命令
+      const command = [
+        'python', '-m', 'mlx_audio.tts.generate',
+        '--text', `"${cleanedText}"`,
+        '--speed', speed.toString(),
+        '--lang_code', `"${langCode}"`,
+        '--model', model,
+        '--ref_audio', `"${refAudio}"`,
+        '--ref_text', `"${refText}"`,
+        '--file_prefix', `"clone_speech_${timestamp}"`,
+        '--audio_format', format === 'mp3' ? 'mp3' : 'wav'
+      ].join(' ');
+
+      console.log(`[TTS-Clone] 执行命令: ${command}`);
+      
+      // 执行命令
+      const { stdout, stderr } = await execAsync(command, { 
+        cwd: this.tempDir,
+        timeout: 60000 // 60秒超时
+      });
+
+      if (stderr) {
+        console.warn(`[TTS-Clone] 警告: ${stderr}`);
+      }
+
+      console.log(`[TTS-Clone] 命令输出: ${stdout}`);
+
+      // 查找生成的文件
+      const files = fs.readdirSync(this.tempDir);
+      const generatedFile = files.find(file => 
+        file.startsWith(`clone_speech_${timestamp}`) && 
+        (file.endsWith(`.${format}`) || file.endsWith('.wav') || file.endsWith('.mp3'))
+      );
+
+      if (!generatedFile) {
+        throw new Error('未找到生成的音频文件');
+      }
+
+      const finalPath = path.join(this.tempDir, generatedFile);
+      console.log(`[TTS-Clone] 克隆语音生成完成: ${finalPath}`);
+      
+      return finalPath;
+
+    } catch (error) {
+      console.error(`[TTS-Clone] 语音克隆失败: ${error.message}`);
+      throw new Error(`语音克隆失败: ${error.message}`);
+    }
+  }
+
+  /**
    * 生成语音文件
    * @param {string} text - 要转换的文本
    * @param {Object} options - 可选参数
@@ -48,6 +128,12 @@ export class TTSService {
   async synthesize(text, options = {}) {
     const voice = options.voice || this.voice;
     const format = options.format || this.outputFormat;
+    const useClone = options.useClone || false;
+
+    // 如果启用克隆模式，使用 mlx-audio
+    if (useClone && this.cloneConfig.enabled) {
+      return this.synthesizeWithClone(text, options);
+    }
     
     const cleanedText = this.cleanText(text);
     const timestamp = Date.now();

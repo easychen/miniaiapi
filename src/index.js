@@ -8,6 +8,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 // 导入配置和服务
 import config from '../config/default.js';
 import audioRoutes from './routes/audioRoutes.js';
+import imageRoutes from './routes/imageRoutes.js';
 import { authenticateApiKey, requestLogger, errorHandler } from './middleware/auth.js';
 import TTSService from './services/ttsService.js';
 import STTService from './services/sttService.js';
@@ -29,6 +30,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// JSON 解析中间件
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
 // 请求日志
 app.use(requestLogger);
 
@@ -37,21 +42,26 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // API 路由
 app.use('/v1/audio', authenticateApiKey, audioRoutes);
+app.use('/v1/images', authenticateApiKey, imageRoutes);
 
 // 代理中间件 - 将其他 /v1/* 请求转发到 LMStudio
-app.use('/v1', createProxyMiddleware({
-  target: 'http://127.0.0.1:1234/v1',
+app.use('/v1', authenticateApiKey, createProxyMiddleware({
+  target: `${config.lmstudio.baseURL}/v1`,
   changeOrigin: true,
   pathRewrite: {
     '^/v1': '/v1'
   },
-  timeout: 60000,
-  proxyTimeout: 60000,
+  timeout: config.lmstudio.timeout,
+  proxyTimeout: config.lmstudio.timeout,
   agent: httpsAgent,
   onProxyReq: (proxyReq, req) => {
-    console.log(`[代理] ${req.method} ${req.path} -> http://127.0.0.1:1234/v1/${req.path}`);
+    console.log(`[代理] ${req.method} ${req.path} -> ${config.lmstudio.baseURL}/v1${req.path}`);
     if (req.headers['authorization']) {
       proxyReq.setHeader('authorization', req.headers['authorization']);
+    }
+    // 如果配置了 LMstudio API Key，则添加到请求头
+    if (config.lmstudio.apiKey) {
+      proxyReq.setHeader('authorization', `Bearer ${config.lmstudio.apiKey}`);
     }
   },
   onProxyRes: (proxyRes, req) => {
@@ -102,7 +112,7 @@ app.get('/v1/models', authenticateApiKey, async (req, res) => {
           id: 'tts-1',
           object: 'model',
           created: Date.now(),
-          owned_by: 'miniapi',
+          owned_by: 'miniAiApi',
           permission: [],
           root: 'tts-1',
           parent: null,
@@ -119,7 +129,7 @@ app.get('/v1/models', authenticateApiKey, async (req, res) => {
           id: 'whisper-1',
           object: 'model',
           created: Date.now(),
-          owned_by: 'miniapi',
+          owned_by: 'miniAiApi',
           permission: [],
           root: 'whisper-1',
           parent: null,
@@ -146,7 +156,7 @@ app.get('/v1/models', authenticateApiKey, async (req, res) => {
 // 根路径返回 API 信息
 app.get('/', (req, res) => {
   res.json({
-    name: 'miniAPI',
+    name: 'miniAiApi',
     description: 'Mac Mini M4 基础能力的 OpenAI 兼容 API 服务',
     version: '1.0.0',
     endpoints: {
@@ -155,7 +165,9 @@ app.get('/', (req, res) => {
       tts: '/v1/audio/speech',
       stt: '/v1/audio/transcriptions',
       translation: '/v1/audio/translations',
-      chat: '/v1/chat/completions'
+      chat: '/v1/chat/completions',
+      embeddings: '/v1/embeddings',
+      images: '/v1/images/generations'
     },
     documentation: 'https://platform.openai.com/docs/api-reference/audio',
     powered_by: 'Mac Mini M4 + MLX'
@@ -183,7 +195,7 @@ const HOST = config.server.host;
 app.listen(PORT, HOST, async () => {
   console.log(`
 ╭─────────────────────────────────────────────╮
-│                  miniAPI                    │
+│                  miniAiApi                    │
 │         Mac Mini M4 AI 能力服务             │
 ├─────────────────────────────────────────────┤
 │ 🚀 服务器启动成功                            │
@@ -199,7 +211,11 @@ app.listen(PORT, HOST, async () => {
 │    POST /v1/audio/translations              │
 │ 🤖 Chat Completion (代理到 LMStudio)        │
 │    POST /v1/chat/completions                │
-│    其他 /v1/* 请求 -> 127.0.0.1:1234        │
+│ 🔗 Embeddings (代理到 LMStudio)             │
+│    POST /v1/embeddings                      │
+│ 🎨 Image Generation (Draw Things)           │
+│    POST /v1/images/generations              │
+│    其他 /v1/* 请求 -> ${config.lmstudio.baseURL.replace('http://', '')}        │
 ╰─────────────────────────────────────────────╯
   `);
 
@@ -237,5 +253,5 @@ app.listen(PORT, HOST, async () => {
     }
   }, 3600000); // 每小时清理一次
   
-  console.log('🎉 miniAPI 服务启动完成！');
+  console.log('🎉 miniAiApi 服务启动完成！');
 });

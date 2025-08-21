@@ -19,7 +19,17 @@ export const config = {
   tts: {
     voice: process.env.TTS_VOICE || 'Yue',
     outputFormat: process.env.TTS_OUTPUT_FORMAT || 'mp3',
-    tempDir: process.env.TTS_TEMP_DIR || '/tmp/miniapi'
+    tempDir: process.env.TTS_TEMP_DIR || '/tmp/miniAiApi',
+    
+    // 音频克隆配置
+    clone: {
+      enabled: process.env.TTS_CLONE_ENABLED === 'true',
+      model: process.env.TTS_CLONE_MODEL || 'mlx-community/Spark-TTS-0.5B-16bf',
+      refAudio: process.env.TTS_CLONE_REF_AUDIO || '',
+      refText: process.env.TTS_CLONE_REF_TEXT || '',
+      langCode: process.env.TTS_CLONE_LANG_CODE || 'z',
+      speed: parseFloat(process.env.TTS_CLONE_SPEED) || 1.0
+    }
   },
 
   // STT 配置
@@ -38,6 +48,20 @@ export const config = {
   api: {
     keyRequired: process.env.API_KEY_REQUIRED === 'true',
     key: process.env.API_KEY || 'your-api-key-here'
+  },
+
+  // LMstudio 配置
+  lmstudio: {
+    baseURL: process.env.LMSTUDIO_BASE_URL || 'http://127.0.0.1:1234',
+    apiKey: process.env.LMSTUDIO_API_KEY || '',
+    timeout: parseInt(process.env.LMSTUDIO_TIMEOUT) || 60000
+  },
+
+  // Draw Things 配置
+  drawThings: {
+    baseURL: process.env.DRAW_THINGS_BASE_URL || 'http://127.0.0.1:7860',
+    enabled: process.env.DRAW_THINGS_ENABLED === 'true',
+    timeout: parseInt(process.env.DRAW_THINGS_TIMEOUT) || 120000
   }
 };
 

@@ -1,5 +1,5 @@
 {
-  "name": "miniapi",
+  "name": "miniAiApi",
   "version": "1.0.0",
   "description": "Mac Mini M4 基础能力的 OpenAI 兼容 API 服务",
   "type": "module",
@@ -26,9 +26,10 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.1",
-    "http-proxy-middleware": "^3.0.0",
+    "http-proxy-middleware": "^3.0.5",
     "https-proxy-agent": "^7.0.6",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2"
   },
   "engines": {
     "node": ">=18.0.0"
