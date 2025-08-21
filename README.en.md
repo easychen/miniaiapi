@@ -2,6 +2,8 @@
 
 [中文](README.md) | **English**
 
+> OpenAI-compatible API optimized for M-series Macs
+
 ![](res/logo.png)
 
 ## Overview
@@ -19,6 +21,24 @@ MiniAiApi is an AI capability service optimized for M-series chip Macs, especial
 - 🔌 **OpenAI Compatible**: Fully compatible with OpenAI API format
 - ⚡ **High Performance**: Optimized for M-series Macs
 - 🛡️ **Secure**: Supports API key authentication
+
+## API Support Status
+
+| API Endpoint | Status | Description | Dependencies |
+|-------------|--------|-------------|-------------|
+| `/v1/audio/speech` | ✅ Available | TTS speech synthesis (traditional + cloning) | macOS `say` / MLX-Audio |
+| `/v1/audio/transcriptions` | ✅ Available | Speech to text | MLX Whisper |
+| `/v1/audio/translations` | ✅ Available | Speech translation to English | MLX Whisper |
+| `/v1/chat/completions` | ✅ Available | Chat completion | LMstudio |
+| `/v1/embeddings` | ✅ Available | Text embeddings | LMstudio |
+| `/v1/images/generations` | ✅ Available | Image generation | Draw Things |
+| `/v1/models` | ✅ Available | Get model list | - |
+| `/health` | ✅ Available | Health check | - |
+
+> **Note**: 
+> - ✅ indicates implemented and available APIs
+> - Some APIs require additional dependency services to work properly
+> - All APIs are compatible with OpenAI request and response formats
 
 ## System Requirements
 

@@ -2,6 +2,8 @@
 
 **中文** | [English](README.en.md)
 
+> 为 M 系 Mac 打造的 OpenAI 兼容 API
+
 ![](res/logo.png)
 
 ## 概述
@@ -19,6 +21,24 @@ MiniAiApi 是一个专为 M 系列芯片的 Mac （尤其是 Mac Mini ）优化�
 - 🔌 **OpenAI 兼容**: 完全兼容 OpenAI API 格式
 - ⚡ **高性能**: 针对 M 系列 Mac 优化
 - 🛡️ **安全**: 支持 API 密钥认证
+
+## API 支持状态
+
+| API 端点 | 状态 | 说明 | 依赖服务 |
+|---------|------|------|---------|
+| `/v1/audio/speech` | ✅ 可用 | TTS 语音合成 (传统 + 克隆) | macOS `say` / MLX-Audio |
+| `/v1/audio/transcriptions` | ✅ 可用 | 语音转文字 | MLX Whisper |
+| `/v1/audio/translations` | ✅ 可用 | 语音翻译为英文 | MLX Whisper |
+| `/v1/chat/completions` | ✅ 可用 | 聊天对话 | LMstudio |
+| `/v1/embeddings` | ✅ 可用 | 文本嵌入 | LMstudio |
+| `/v1/images/generations` | ✅ 可用 | 图像生成 | Draw Things |
+| `/v1/models` | ✅ 可用 | 获取模型列表 | - |
+| `/health` | ✅ 可用 | 健康检查 | - |
+
+> **备注**: 
+> - ✅ 表示已实现并可用的 API
+> - 部分 API 需要额外的依赖服务才能正常工作
+> - 所有 API 都兼容 OpenAI 的请求和响应格式
 
 ## 系统要求
 
