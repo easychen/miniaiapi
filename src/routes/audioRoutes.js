@@ -132,7 +132,8 @@ router.post('/transcriptions', upload.single('file'), async (req, res) => {
       language = 'zh',
       prompt,
       response_format = 'json',
-      temperature = 0
+      temperature = 0,
+      timestamp_granularities
     } = req.body;
 
     if (!req.file) {
@@ -146,36 +147,79 @@ router.post('/transcriptions', upload.single('file'), async (req, res) => {
     }
 
     console.log(`[API] STT 请求 - 模型: ${model}, 语言: ${language}, 格式: ${response_format}`);
-
-    const inputFile = req.file.path;
-    const outputDir = '/tmp/whisper_output/';
     
-    // 确保输出目录存在
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+    // 解析 timestamp_granularities 参数，默认为 ["segment"]
+    let timestampGranularities = ['segment']; // OpenAI API 默认值
+    if (timestamp_granularities) {
+      if (Array.isArray(timestamp_granularities)) {
+        timestampGranularities = timestamp_granularities;
+      } else if (typeof timestamp_granularities === 'string') {
+        // 处理可能的 JSON 字符串或逗号分隔的字符串
+        try {
+          timestampGranularities = JSON.parse(timestamp_granularities);
+        } catch {
+          timestampGranularities = timestamp_granularities.split(',').map(s => s.trim());
+        }
+      }
     }
 
-    // 调用 mlx_whisper 进行语音识别 (直接使用原始API的方式)
-    const command = `TRANSFORMERS_OFFLINE=1 mlx_whisper --model=mlx-community/whisper-large-v3-mlx --output-format=json --output-dir=${outputDir} --language=${language} "${inputFile}"`;
+    console.log(`[API] 时间戳粒度: ${JSON.stringify(timestampGranularities)}`);
+
+    const inputFile = req.file.path;
     
-    console.log(`[API] 执行命令: ${command}`);
+    // 确定时间戳粒度需求
+    const needWordTimestamps = timestampGranularities.includes('word');
+    const needSegmentTimestamps = timestampGranularities.includes('segment');
     
-    await execAsync(command);
-    
-    // 读取生成的 JSON 文件
-    const jsonFile = `${outputDir}${req.file.filename}.json`;
-    const result = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+    // 使用 STTService 进行识别
+    const result = await sttService.transcribe(inputFile, {
+      language: language,
+      model: 'mlx-community/whisper-large-v3-mlx',
+      word_timestamps: needWordTimestamps,
+      timestamp_granularities: timestampGranularities
+    });
 
     // 清理临时文件
     fs.unlink(inputFile, (err) => {
       if (err) console.error(`[API] 删除临时文件错误: ${err.message}`);
     });
-    fs.unlink(jsonFile, (err) => {
-      if (err) console.error(`[API] 删除 JSON 文件错误: ${err.message}`);
-    });
 
-    // 返回识别结果（与原始API一致）
-    res.json({ text: result.text });
+    // 根据格式返回结果
+    if (response_format === 'text') {
+      res.set('Content-Type', 'text/plain');
+      res.send(result.text);
+    } else if (response_format === 'verbose_json') {
+      // 返回详细的 JSON 格式，包含时间戳
+      const verboseResult = {
+        task: 'transcribe',
+        language: result.language,
+        duration: result.duration,
+        text: result.text
+      };
+
+      // 根据请求的时间戳粒度添加相应数据
+      if (needSegmentTimestamps && result.segments) {
+        verboseResult.segments = result.segments;
+      }
+      if (needWordTimestamps && result.words) {
+        verboseResult.words = result.words;
+      }
+
+      res.json(verboseResult);
+    } else {
+      // 标准 JSON 格式
+      const response = { text: result.text };
+      
+      // 根据请求的时间戳粒度添加相应数据
+      if (needSegmentTimestamps && result.segments) {
+        response.segments = result.segments;
+      }
+      if (needWordTimestamps && result.words) {
+        response.words = result.words;
+      }
+      
+      res.json(response);
+    }
 
   } catch (error) {
     console.error('[API] 语音识别错误:', error);
@@ -187,7 +231,13 @@ router.post('/transcriptions', upload.single('file'), async (req, res) => {
       });
     }
 
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      error: {
+        message: error.message,
+        type: 'server_error',
+        code: 'transcription_error'
+      }
+    });
   }
 });
 

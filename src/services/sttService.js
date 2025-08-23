@@ -32,22 +32,33 @@ export class STTService {
     const model = options.model || this.model;
     const language = options.language || this.language;
     const outputDir = options.outputDir || this.outputDir;
+    const wordTimestamps = options.word_timestamps || false;
+    const timestampGranularities = options.timestamp_granularities || [];
     
     try {
       console.log(`[STT] 开始语音识别: ${audioFilePath}`);
       console.log(`[STT] 使用模型: ${model}`);
       console.log(`[STT] 识别语言: ${language}`);
+      console.log(`[STT] 词级时间戳: ${wordTimestamps}`);
+      console.log(`[STT] 时间戳粒度: ${JSON.stringify(timestampGranularities)}`);
 
       // 构建 mlx_whisper 命令
-      const command = [
+      const commandParts = [
         'TRANSFORMERS_OFFLINE=1',
         'mlx_whisper',
         `--model=${model}`,
         '--output-format=json',
         `--output-dir=${outputDir}`,
-        `--language=${language}`,
-        `"${audioFilePath}"`
-      ].join(' ');
+        `--language=${language}`
+      ];
+
+      // 添加词级时间戳参数
+      if (wordTimestamps) {
+        commandParts.push('--word-timestamps=True');
+      }
+
+      commandParts.push(`"${audioFilePath}"`);
+      const command = commandParts.join(' ');
 
       console.log(`[STT] 执行命令: ${command}`);
       
@@ -78,12 +89,33 @@ export class STTService {
         }
       });
       
-      return {
+      // 构建返回结果
+      const response = {
         text: result.text || '',
         segments: result.segments || [],
         language: result.language || language,
         duration: result.duration || 0
       };
+
+      // 如果启用了词级时间戳，添加相关数据
+      if (wordTimestamps && result.segments) {
+        // 提取所有词级时间戳
+        const words = [];
+        result.segments.forEach(segment => {
+          if (segment.words) {
+            segment.words.forEach(word => {
+              words.push({
+                word: word.word,
+                start: word.start,
+                end: word.end
+              });
+            });
+          }
+        });
+        response.words = words;
+      }
+
+      return response;
       
     } catch (error) {
       console.error(`[STT] 语音识别失败: ${error.message}`);
