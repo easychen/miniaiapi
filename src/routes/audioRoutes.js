@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import TTSService from '../services/ttsService.js';
 import STTService from '../services/sttService.js';
+import config from '../../config/default.js';
 
 const execAsync = promisify(exec);
 
@@ -51,7 +52,13 @@ router.post('/speech', express.json({ limit: '50mb' }), async (req, res) => {
     const isCloneModel = model.endsWith(':clone');
     const actualModel = isCloneModel ? model.slice(0, -6) : model; // 去除 :clone 后缀
 
-    console.log(`[API] TTS 请求 - 模型: ${actualModel}, 克隆模式: ${isCloneModel}, 语音: ${voice}, 格式: ${response_format}`);
+    const modelConfig = config.tts.model;
+    const isStandardModelRequest =
+      (modelConfig?.enabled && actualModel === modelConfig.alias) ||
+      actualModel === modelConfig?.name ||
+      actualModel === 'mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16';
+
+    console.log(`[API] TTS 请求 - 模型: ${actualModel}, 克隆模式: ${isCloneModel}, 模型模式: ${isStandardModelRequest}, 语音: ${voice}, 格式: ${response_format}`);
 
     let audioFile;
 
@@ -62,6 +69,53 @@ router.post('/speech', express.json({ limit: '50mb' }), async (req, res) => {
         useClone: true,
         format: response_format,
         speed: speed
+      });
+    } else if (isStandardModelRequest) {
+      const langCode = /[\u4E00-\u9FFF]/.test(input) ? 'z' : 'a';
+      const supportedVoices = new Set([
+        'Vivian',
+        'Serena',
+        'Uncle_Fu',
+        'Dylan',
+        'Eric',
+        'Ryan',
+        'Aiden'
+      ]);
+
+      const qwen3VoiceMappingZh = {
+        alloy: 'Momo',
+        echo: 'Serena',
+        fable: 'Uncle_Fu',
+        onyx: 'Dylan',
+        nova: 'Eric',
+        shimmer: 'Vivian'
+      };
+
+      const qwen3VoiceMappingEn = {
+        alloy: 'Ryan',
+        echo: 'Aiden',
+        fable: 'Ryan',
+        onyx: 'Aiden',
+        nova: 'Ryan',
+        shimmer: 'Aiden'
+      };
+
+      const defaultVoiceZh = modelConfig?.defaultVoiceZh || 'Vivian';
+      const defaultVoiceEn = modelConfig?.defaultVoiceEn || 'Ryan';
+
+      const qwenVoice = supportedVoices.has(voice)
+        ? voice
+        : (langCode === 'z' ? qwen3VoiceMappingZh[voice] : qwen3VoiceMappingEn[voice]) || (langCode === 'z' ? defaultVoiceZh : defaultVoiceEn);
+
+      console.log(`[API] 使用 Qwen3-TTS 模型生成语音`);
+      audioFile = await ttsService.synthesize(input, {
+        useModel: true,
+        model: modelConfig?.name || actualModel,
+        modelLocalPath: modelConfig?.localPath || '',
+        voice: qwenVoice,
+        langCode,
+        format: response_format,
+        speed
       });
     } else {
       // 使用传统 macOS TTS

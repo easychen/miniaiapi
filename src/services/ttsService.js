@@ -12,6 +12,7 @@ export class TTSService {
     this.outputFormat = config.tts.outputFormat;
     this.tempDir = config.tts.tempDir;
     this.cloneConfig = config.tts.clone;
+    this.modelConfig = config.tts.model;
     
     // 确保临时目录存在
     this.ensureTempDir();
@@ -72,6 +73,8 @@ export class TTSService {
 
       // 构建 mlx-audio 命令
       const command = [
+        'HF_HUB_OFFLINE=1',
+        'TRANSFORMERS_OFFLINE=1',
         'python', '-m', 'mlx_audio.tts.generate',
         '--text', `"${cleanedText}"`,
         '--speed', speed.toString(),
@@ -119,6 +122,83 @@ export class TTSService {
     }
   }
 
+  async synthesizeWithMlxModel(text, options = {}) {
+    const model = options.model;
+    const modelLocalPath = options.modelLocalPath;
+    const voice = options.voice;
+    const langCode = options.langCode;
+    const speed = options.speed || 1.0;
+    const format = options.format || this.outputFormat;
+
+    if (!model) {
+      throw new Error('使用模型模式需要指定 model');
+    }
+
+    const cleanedText = this.cleanText(text);
+    const timestamp = Date.now();
+
+    try {
+      console.log(`[TTS-Model] 开始使用 mlx-audio 生成语音`);
+      console.log(`[TTS-Model] 模型: ${model}`);
+      console.log(`[TTS-Model] 语音: ${voice || ''}`);
+      console.log(`[TTS-Model] 语言代码: ${langCode || ''}`);
+      console.log(`[TTS-Model] 语速: ${speed}`);
+      console.log(`[TTS-Model] 文本内容: ${cleanedText.substring(0, 100)}...`);
+
+      const commandParts = [
+        'HF_HUB_OFFLINE=1',
+        'TRANSFORMERS_OFFLINE=1',
+        'python', '-m', 'mlx_audio.tts.generate',
+        '--text', `"${cleanedText}"`,
+        '--speed', speed.toString(),
+        '--model', modelLocalPath || model,
+        '--file_prefix', `"model_speech_${timestamp}"`,
+        '--audio_format', format === 'mp3' ? 'mp3' : 'wav'
+      ];
+
+      if (voice) {
+        commandParts.push('--voice', `"${voice}"`);
+      }
+
+      if (langCode) {
+        commandParts.push('--lang_code', `"${langCode}"`);
+      }
+
+      const command = commandParts.join(' ');
+
+      console.log(`[TTS-Model] 执行命令: ${command}`);
+
+      const { stdout, stderr } = await execAsync(command, {
+        cwd: this.tempDir,
+        timeout: 120000
+      });
+
+      if (stderr) {
+        console.warn(`[TTS-Model] 警告: ${stderr}`);
+      }
+
+      console.log(`[TTS-Model] 命令输出: ${stdout}`);
+
+      const files = fs.readdirSync(this.tempDir);
+      const generatedFile = files.find(file =>
+        file.startsWith(`model_speech_${timestamp}`) &&
+        (file.endsWith(`.${format}`) || file.endsWith('.wav') || file.endsWith('.mp3'))
+      );
+
+      if (!generatedFile) {
+        throw new Error('未找到生成的音频文件');
+      }
+
+      const finalPath = path.join(this.tempDir, generatedFile);
+      console.log(`[TTS-Model] 语音生成完成: ${finalPath}`);
+
+      return finalPath;
+    } catch (error) {
+      console.error(`[TTS-Model] 语音生成失败: ${error.message}`);
+      throw new Error(`语音生成失败: ${error.message}`);
+    }
+  }
+
   /**
    * 生成语音文件
    * @param {string} text - 要转换的文本
@@ -129,10 +209,15 @@ export class TTSService {
     const voice = options.voice || this.voice;
     const format = options.format || this.outputFormat;
     const useClone = options.useClone || false;
+    const useModel = options.useModel || false;
 
     // 如果启用克隆模式，使用 mlx-audio
     if (useClone && this.cloneConfig.enabled) {
       return this.synthesizeWithClone(text, options);
+    }
+
+    if (useModel) {
+      return this.synthesizeWithMlxModel(text, options);
     }
     
     const cleanedText = this.cleanText(text);

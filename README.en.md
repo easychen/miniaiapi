@@ -13,6 +13,7 @@ MiniAiApi is an AI capability service optimized for M-series chip Macs, especial
 ## Features
 
 - 🎤 **Text-to-Speech (TTS)**: Speech synthesis using macOS native `say` command
+- 🧠 **Model TTS (No Cloning)**: Standard TTS model generation via MLX-Audio (e.g., Qwen3-TTS)
 - 🎵 **Voice Cloning**: High-quality audio cloning technology based on MLX-Audio and SparkTTS
 - 🎧 **Speech-to-Text (STT)**: Speech recognition based on MLX Whisper
 - 🤖 **Chat Completion**: Proxy forwarding to LMstudio chat interface
@@ -26,7 +27,7 @@ MiniAiApi is an AI capability service optimized for M-series chip Macs, especial
 
 | API Endpoint | Status | Description | Dependencies |
 |-------------|--------|-------------|-------------|
-| `/v1/audio/speech` | ✅ Available | TTS speech synthesis (traditional + cloning) | macOS `say` / MLX-Audio |
+| `/v1/audio/speech` | ✅ Available | TTS speech synthesis (traditional + model + cloning) | macOS `say` / MLX-Audio |
 | `/v1/audio/transcriptions` | ✅ Available | Speech to text | MLX Whisper |
 | `/v1/audio/translations` | ✅ Available | Speech translation to English | MLX Whisper |
 | `/v1/chat/completions` | ✅ Available | Chat completion | LMstudio |
@@ -103,6 +104,9 @@ hf download mlx-community/whisper-large-v3-mlx (Large model has better Chinese r
 hf download mlx-community/Spark-TTS-0.5B-fp16
 hf download mlx-community/Spark-TTS-0.5B-4-6bit (backup, worse cloning effect but faster)
 
+# Download Qwen3-TTS (standard model, no cloning)
+hf download mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16
+
 # Download other available models (optional)
 hf download mlx-community/Kokoro-82M-bf16 (poor Chinese support, good for other languages)
 ```
@@ -125,6 +129,14 @@ HOST=0.0.0.0
 # TTS configuration
 TTS_VOICE=Yue
 TTS_OUTPUT_FORMAT=mp3
+
+# TTS model configuration (no cloning)
+TTS_MODEL_ENABLED=false
+TTS_MODEL_ALIAS=tts-1:model
+TTS_MODEL_NAME=mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16
+TTS_MODEL_LOCAL_PATH=
+TTS_MODEL_DEFAULT_VOICE_ZH=Vivian
+TTS_MODEL_DEFAULT_VOICE_EN=Ryan
 
 # TTS audio cloning configuration (optional)
 TTS_CLONE_ENABLED=false
@@ -197,6 +209,12 @@ curl -X POST http://localhost:3000/v1/audio/speech \
   -d '{"model": "tts-1", "input": "Test traditional speech synthesis"}' \
   --output test_normal.mp3
 
+# Test model TTS (no cloning)
+curl -X POST http://localhost:3000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"model": "tts-1:model", "input": "Test model TTS (no cloning)", "voice": "alloy", "response_format": "wav"}' \
+  --output test_model.wav
+
 # Test audio cloning
 curl -X POST http://localhost:3000/v1/audio/speech \
   -H "Content-Type: application/json" \
@@ -265,6 +283,32 @@ curl -X POST http://localhost:3000/v1/audio/speech \
 > - Before using clone mode, you need to configure `TTS_CLONE_ENABLED=true` and related parameters in `.env`
 > - You need to provide a reference audio file and corresponding reference text
 > - Clone mode ignores the `voice` parameter and uses the configured reference audio for voice cloning
+
+##### Model TTS (No Cloning, using MLX-Audio)
+
+Model TTS does not require reference audio and does not do voice cloning. It directly generates speech from a TTS model.
+
+Recommended usage is to enable it via `.env`, then trigger it through `TTS_MODEL_ALIAS` (default: `tts-1:model`):
+
+```bash
+curl -X POST http://localhost:3000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tts-1:model",
+    "input": "Hello, this is a model TTS test.",
+    "voice": "alloy",
+    "response_format": "wav",
+    "speed": 1.0
+  }' \
+  --output speech_model.wav
+```
+
+`TTS_MODEL_ALIAS` provides a stable model name for clients so you don't have to hardcode a specific Hugging Face repo id or local snapshot path everywhere:
+- You can set `TTS_MODEL_ALIAS` to any string (for example `tts-1:qwen3`) and use the same value in the request `model` field to trigger Model TTS
+- When `TTS_MODEL_ENABLED=true`: `model == TTS_MODEL_ALIAS` triggers Model TTS
+- You can also trigger Model TTS by sending `model == TTS_MODEL_NAME` (for example `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16`)
+
+`TTS_MODEL_LOCAL_PATH` (optional) forces usage of an already-downloaded local snapshot directory, which is useful for offline environments.
 
 #### 2. Speech-to-Text (STT)
 
@@ -345,6 +389,15 @@ curl http://localhost:3000/health
 - `TTS_VOICE`: Default voice (default: Yue)
 - `TTS_OUTPUT_FORMAT`: Output format (mp3/wav)
 - `TTS_TEMP_DIR`: Temporary file directory
+
+### TTS Model Configuration (No Cloning)
+
+- `TTS_MODEL_ENABLED`: Whether to enable model TTS (default: false)
+- `TTS_MODEL_ALIAS`: Alias entry for model TTS (default: tts-1:model)
+- `TTS_MODEL_NAME`: Model repo id (default: mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16)
+- `TTS_MODEL_LOCAL_PATH`: Local snapshot directory (optional, takes precedence over repo id)
+- `TTS_MODEL_DEFAULT_VOICE_ZH`: Default speaker for Chinese (default: Vivian)
+- `TTS_MODEL_DEFAULT_VOICE_EN`: Default speaker for English (default: Ryan)
 
 ### TTS Audio Cloning Configuration
 
@@ -469,6 +522,11 @@ The API uses standard HTTP status codes and OpenAI-compatible error format:
    - Ensure reference text matches reference audio content
    - Verify model is downloaded: `ls ~/.cache/huggingface/hub/`
    - Check if language code is correct (use `z` for Chinese)
+
+3. **Model TTS not working**
+   - Check `pip show mlx-audio` and ensure the installed version supports `qwen3_tts` (for example mlx-audio 0.3.1+)
+   - Ensure `TTS_MODEL_ENABLED=true` is configured
+   - If using `TTS_MODEL_LOCAL_PATH`, make sure the directory exists and is readable
 
 3. **STT not working**
    - Check if MLX Whisper is installed: `which mlx_whisper`

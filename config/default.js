@@ -20,6 +20,15 @@ export const config = {
     voice: process.env.TTS_VOICE || 'Yue',
     outputFormat: process.env.TTS_OUTPUT_FORMAT || 'mp3',
     tempDir: process.env.TTS_TEMP_DIR || '/tmp/miniAiApi',
+
+    model: {
+      enabled: process.env.TTS_MODEL_ENABLED === 'true',
+      alias: process.env.TTS_MODEL_ALIAS || 'tts-1:model',
+      name: process.env.TTS_MODEL_NAME || 'mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16',
+      localPath: process.env.TTS_MODEL_LOCAL_PATH || '',
+      defaultVoiceZh: process.env.TTS_MODEL_DEFAULT_VOICE_ZH || 'Vivian',
+      defaultVoiceEn: process.env.TTS_MODEL_DEFAULT_VOICE_EN || 'Ryan'
+    },
     
     // 音频克隆配置
     clone: {

@@ -13,6 +13,7 @@ MiniAiApi 是一个专为 M 系列芯片的 Mac （尤其是 Mac Mini ）优化�
 ## 功能特性
 
 - 🎤 **Text-to-Speech (TTS)**: 使用 macOS 原生 `say` 命令进行语音合成
+- 🧠 **Model TTS (不克隆)**: 基于 MLX-Audio 的标准 TTS 模型直出语音（如 Qwen3-TTS）
 - 🎵 **Voice Cloning**: 基于 MLX-Audio 和 SparkTTS 的高质量音频克隆技术
 - 🎧 **Speech-to-Text (STT)**: 基于 MLX Whisper 的语音识别
 - 🤖 **Chat Completion**: 代理转发到 LMstudio 的聊天接口
@@ -26,7 +27,7 @@ MiniAiApi 是一个专为 M 系列芯片的 Mac （尤其是 Mac Mini ）优化�
 
 | API 端点 | 状态 | 说明 | 依赖服务 |
 |---------|------|------|---------|
-| `/v1/audio/speech` | ✅ 可用 | TTS 语音合成 (传统 + 克隆) | macOS `say` / MLX-Audio |
+| `/v1/audio/speech` | ✅ 可用 | TTS 语音合成 (传统 + 模型 + 克隆) | macOS `say` / MLX-Audio |
 | `/v1/audio/transcriptions` | ✅ 可用 | 语音转文字 | MLX Whisper |
 | `/v1/audio/translations` | ✅ 可用 | 语音翻译为英文 | MLX Whisper |
 | `/v1/chat/completions` | ✅ 可用 | 聊天对话 | LMstudio |
@@ -103,6 +104,9 @@ hf download mlx-community/whisper-large-v3-mlx (Large模型中文识别效果较
 hf download mlx-community/Spark-TTS-0.5B-fp16
 hf download mlx-community/Spark-TTS-0.5B-4-6bit(备用，克隆效果较差，但更快)
 
+# 下载 Qwen3-TTS (标准模型，不克隆)
+hf download mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16
+
 # 下载其他可用模型 (可选)
 hf download mlx-community/Kokoro-82M-bf16 (中文非常不行，其他语言可以)
 ```
@@ -125,6 +129,14 @@ HOST=0.0.0.0
 # TTS 配置
 TTS_VOICE=Yue
 TTS_OUTPUT_FORMAT=mp3
+
+# TTS 标准模型配置（不克隆）
+TTS_MODEL_ENABLED=false
+TTS_MODEL_ALIAS=tts-1:model
+TTS_MODEL_NAME=mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16
+TTS_MODEL_LOCAL_PATH=
+TTS_MODEL_DEFAULT_VOICE_ZH=Vivian
+TTS_MODEL_DEFAULT_VOICE_EN=Ryan
 
 # TTS 音频克隆配置 (可选)
 TTS_CLONE_ENABLED=false
@@ -197,6 +209,12 @@ curl -X POST http://localhost:3000/v1/audio/speech \
   -d '{"model": "tts-1", "input": "测试传统语音合成"}' \
   --output test_normal.mp3
 
+# 测试标准模型 TTS（不克隆）
+curl -X POST http://localhost:3000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"model": "tts-1:model", "input": "测试标准模型语音合成", "voice": "alloy", "response_format": "wav"}' \
+  --output test_model.wav
+
 # 测试音频克隆
 curl -X POST http://localhost:3000/v1/audio/speech \
   -H "Content-Type: application/json" \
@@ -265,6 +283,32 @@ curl -X POST http://localhost:3000/v1/audio/speech \
 > - 使用克隆模式前，需要在 `.env` 中配置 `TTS_CLONE_ENABLED=true` 和相关参数
 > - 需要提供参考音频文件和对应的参考文本
 > - 克隆模式会忽略 `voice` 参数，使用配置的参考音频进行音色克隆
+
+##### 标准模型 TTS（不克隆，使用 MLX-Audio）
+
+标准模型 TTS 不需要参考音频，不做音色克隆，直接使用 TTS 模型生成语音。
+
+推荐用 `.env` 开启后，通过 `TTS_MODEL_ALIAS` 触发（默认 `tts-1:model`）：
+
+```bash
+curl -X POST http://localhost:3000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tts-1:model",
+    "input": "你好，这是标准模型语音合成测试。",
+    "voice": "alloy",
+    "response_format": "wav",
+    "speed": 1.0
+  }' \
+  --output speech_model.wav
+```
+
+`TTS_MODEL_ALIAS` 的作用是把“标准模型 TTS”映射成一个稳定的模型名，避免你在客户端到处硬编码具体的模型 repo id 或本地路径：
+- 你可以把 `TTS_MODEL_ALIAS` 改成任意字符串（例如 `tts-1:qwen3`），然后客户端请求里使用同名 `model` 即可触发标准模型分支
+- 当 `TTS_MODEL_ENABLED=true` 时：`model == TTS_MODEL_ALIAS` 会走标准模型
+- 你也可以直接传 `model == TTS_MODEL_NAME`（例如 `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16`）来触发标准模型
+
+`TTS_MODEL_LOCAL_PATH`（可选）用于强制只用本地已下载的 snapshot 路径，避免运行时访问 Hugging Face（适合离线环境）。
 
 #### 2. 语音识别 (STT)
 
@@ -345,6 +389,15 @@ curl http://localhost:3000/health
 - `TTS_VOICE`: 默认语音 (默认: Yue)
 - `TTS_OUTPUT_FORMAT`: 输出格式 (mp3/wav)
 - `TTS_TEMP_DIR`: 临时文件目录
+
+### TTS 标准模型配置（不克隆）
+
+- `TTS_MODEL_ENABLED`: 是否启用标准模型 TTS (默认: false)
+- `TTS_MODEL_ALIAS`: 标准模型的别名入口 (默认: tts-1:model)
+- `TTS_MODEL_NAME`: 标准模型 repo id (默认: mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16)
+- `TTS_MODEL_LOCAL_PATH`: 标准模型本地 snapshot 目录 (可选，优先于 repo id)
+- `TTS_MODEL_DEFAULT_VOICE_ZH`: 中文默认 speaker (默认: Vivian)
+- `TTS_MODEL_DEFAULT_VOICE_EN`: 英文默认 speaker (默认: Ryan)
 
 ### TTS 音频克隆配置
 
@@ -469,6 +522,11 @@ API 使用标准的 HTTP 状态码和 OpenAI 兼容的错误格式：
    - 确保参考文本与参考音频内容匹配
    - 验证模型是否已下载: `ls ~/.cache/huggingface/hub/`
    - 检查语言代码是否正确 (中文使用 `z`)
+
+3. **标准模型 TTS 不工作**
+   - 确认 `pip show mlx-audio` 版本足够新并包含 `qwen3_tts`（例如 mlx-audio 0.3.1+）
+   - 确保配置了 `TTS_MODEL_ENABLED=true`
+   - 如果使用 `TTS_MODEL_LOCAL_PATH`，确认该目录存在且可读
 
 3. **STT 不工作**
    - 检查 MLX Whisper 是否安装: `which mlx_whisper`
